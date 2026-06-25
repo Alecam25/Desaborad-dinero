@@ -177,7 +177,11 @@ useEffect(() => {
           )}
         </section>
 
-        <RegisterPayment session={session} onCycleCreated={loadLatestCycle} />
+        <RegisterPayment
+          session={session}
+          fixedExpenses={fixedExpenses}
+          onCycleCreated={loadLatestCycle}
+        />
 
         <DailyExpenses
           session={session}

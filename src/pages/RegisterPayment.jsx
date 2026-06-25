@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import {
   calculateSalaryCRC,
@@ -9,71 +9,50 @@ import {
   formatCRC,
 } from '../utils/financeCalculations'
 
-export default function RegisterPayment({ session, onCycleCreated }) {
+export default function RegisterPayment({
+  session,
+  fixedExpenses = [],
+  onCycleCreated,
+}) {
   const [salaryUsd, setSalaryUsd] = useState(930)
   const [exchangeRate, setExchangeRate] = useState('')
   const [paymentDate, setPaymentDate] = useState('')
+  const [nextPaymentDate, setNextPaymentDate] = useState('')
+  const [payFrequency, setPayFrequency] = useState('monthly')
   const [savingPercentage, setSavingPercentage] = useState(10)
-  const [fixedExpenses, setFixedExpenses] = useState([])
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+
+  function calculateDaysBetween(startDate, endDate) {
+    if (!startDate || !endDate) return 30
+
+    const start = new Date(`${startDate}T00:00:00`)
+    const end = new Date(`${endDate}T00:00:00`)
+
+    const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+
+    return diff > 0 ? diff : 30
+  }
 
   const salaryCRC = calculateSalaryCRC(salaryUsd, exchangeRate || 0)
   const fixedTotal = calculateFixedExpensesTotal(fixedExpenses, exchangeRate || 0)
   const afterFixed = salaryCRC - fixedTotal
- const savingAmount = calculateSavings(afterFixed, savingPercentage)
-  const availableAmount = calculateAvailableAmount(salaryCRC, fixedTotal, savingAmount)
-  const dailyLimit = calculateDailyLimit(availableAmount, 30)
+  const savingAmount = calculateSavings(afterFixed, savingPercentage)
+  const availableAmount = calculateAvailableAmount(
+    salaryCRC,
+    fixedTotal,
+    savingAmount
+  )
 
-  useEffect(() => {
-    loadFixedExpenses()
-  }, [])
-async function seedFixedExpenses() {
-  setLoading(true)
-  setMessage('')
+  const daysUntilNextPayment = calculateDaysBetween(
+    paymentDate,
+    nextPaymentDate
+  )
 
-  const initialExpenses = [
-    { name: 'Viáticos', amount: 100000, currency: 'CRC', due_day: 30, category: 'Transporte' },
-    { name: 'Celular', amount: 12000, currency: 'CRC', due_day: 12, category: 'Obligaciones' },
-    { name: 'Mami', amount: 30000, currency: 'CRC', due_day: 30, category: 'Familia' },
-    { name: 'Seguro', amount: 30000, currency: 'CRC', due_day: 1, category: 'Seguro' },
-    { name: 'Gym', amount: 18000, currency: 'CRC', due_day: 30, category: 'Salud' },
-    { name: 'ChatGPT', amount: 20, currency: 'USD', due_day: 8, category: 'Suscripciones' },
-  ]
-
-  const expensesWithUser = initialExpenses.map((expense) => ({
-    ...expense,
-    user_id: session.user.id,
-  }))
-
-  const { error } = await supabase
-    .from('fixed_expenses')
-    .insert(expensesWithUser)
-
-  setLoading(false)
-
-  if (error) {
-    setMessage(error.message)
-    return
-  }
-
-  setMessage('Gastos fijos cargados correctamente.')
-  loadFixedExpenses()
-}
-  async function loadFixedExpenses() {
-    const { data, error } = await supabase
-      .from('fixed_expenses')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .eq('is_active', true)
-
-    if (error) {
-      setMessage(error.message)
-      return
-    }
-
-    setFixedExpenses(data || [])
-  }
+  const dailyLimit = calculateDailyLimit(
+    availableAmount,
+    daysUntilNextPayment
+  )
 
   async function createMonthlyCycle(e) {
     e.preventDefault()
@@ -81,23 +60,27 @@ async function seedFixedExpenses() {
     setMessage('')
 
     const month = paymentDate.slice(0, 7)
+
     const { data: existingCycle } = await supabase
       .from('monthly_cycles')
       .select('id')
       .eq('user_id', session.user.id)
-      .eq('month', month)
+      .eq('payment_date', paymentDate)
       .maybeSingle()
 
     if (existingCycle) {
       setLoading(false)
-      setMessage('Ya existe un presupuesto para este mes.')
+      setMessage('Ya existe un presupuesto registrado para esta fecha de pago.')
       return
-}
+    }
 
     const { error } = await supabase.from('monthly_cycles').insert({
       user_id: session.user.id,
       month,
       payment_date: paymentDate,
+      next_payment_date: nextPaymentDate,
+      pay_frequency: payFrequency,
+      days_until_next_payment: daysUntilNextPayment,
       salary_usd: Number(salaryUsd),
       exchange_rate: Number(exchangeRate),
       salary_crc: salaryCRC,
@@ -116,28 +99,33 @@ async function seedFixedExpenses() {
       return
     }
 
-    setMessage('Presupuesto mensual creado correctamente.')
+    setMessage('Presupuesto creado correctamente.')
     onCycleCreated?.()
   }
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
-      <h2 className="text-2xl font-bold mb-2">Registrar pago mensual</h2>
+      <h2 className="text-2xl font-bold mb-2">Registrar pago</h2>
+
       <p className="text-slate-400 mb-6">
-        Ingresa tu salario en dólares y el tipo de cambio del mes.
+        Ingresa tu salario, tipo de cambio, frecuencia de pago y porcentaje de ahorro.
       </p>
+
       {fixedExpenses.length === 0 && (
-        <button
-            type="button"
-            onClick={seedFixedExpenses}
-            className="mb-6 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-3 rounded-xl text-sm"
-        >
-            Cargar mis gastos fijos iniciales
-        </button>
-        )}
-      <form onSubmit={createMonthlyCycle} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 px-4 py-3 rounded-xl text-sm">
+          Aún no tienes gastos fijos. Puedes crear tu presupuesto sin gastos fijos,
+          o agregarlos abajo en la sección de gastos fijos.
+        </div>
+      )}
+
+      <form
+        onSubmit={createMonthlyCycle}
+        className="grid grid-cols-1 md:grid-cols-6 gap-4"
+      >
         <div>
-          <label className="block text-sm text-slate-300 mb-2">Salario USD</label>
+          <label className="block text-sm text-slate-300 mb-2">
+            Salario USD
+          </label>
           <input
             type="number"
             value={salaryUsd}
@@ -148,7 +136,9 @@ async function seedFixedExpenses() {
         </div>
 
         <div>
-          <label className="block text-sm text-slate-300 mb-2">Tipo de cambio</label>
+          <label className="block text-sm text-slate-300 mb-2">
+            Tipo de cambio
+          </label>
           <input
             type="number"
             step="0.01"
@@ -160,7 +150,9 @@ async function seedFixedExpenses() {
         </div>
 
         <div>
-          <label className="block text-sm text-slate-300 mb-2">Fecha de pago</label>
+          <label className="block text-sm text-slate-300 mb-2">
+            Fecha de pago
+          </label>
           <input
             type="date"
             value={paymentDate}
@@ -169,31 +161,61 @@ async function seedFixedExpenses() {
             required
           />
         </div>
+
         <div>
-        <label className="block text-sm text-slate-300 mb-2">
-          Ahorro %
-        </label>
-        <input
-          type="number"
-          min="0"
-          max="100"
-          value={savingPercentage}
-          onChange={(e) => setSavingPercentage(e.target.value)}
-          className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
-          required
-        />
-      </div>
+          <label className="block text-sm text-slate-300 mb-2">
+            Próximo pago
+          </label>
+          <input
+            type="date"
+            value={nextPaymentDate}
+            onChange={(e) => setNextPaymentDate(e.target.value)}
+            className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-slate-300 mb-2">
+            Frecuencia
+          </label>
+          <select
+            value={payFrequency}
+            onChange={(e) => setPayFrequency(e.target.value)}
+            className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+          >
+            <option value="monthly">Mensual</option>
+            <option value="biweekly">Quincenal</option>
+            <option value="weekly">Semanal</option>
+            <option value="custom">Personalizado</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm text-slate-300 mb-2">
+            Ahorro %
+          </label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={savingPercentage}
+            onChange={(e) => setSavingPercentage(e.target.value)}
+            className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+            required
+          />
+        </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="md:col-span-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition disabled:opacity-60"
+          className="md:col-span-6 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition disabled:opacity-60"
         >
-          {loading ? 'Guardando...' : 'Crear presupuesto del mes'}
+          {loading ? 'Guardando...' : 'Crear presupuesto'}
         </button>
       </form>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-6">
         <div className="bg-slate-800 rounded-xl p-4">
           <p className="text-slate-400 text-sm">Ingreso CRC</p>
           <h3 className="text-xl font-bold">{formatCRC(salaryCRC)}</h3>
@@ -205,7 +227,9 @@ async function seedFixedExpenses() {
         </div>
 
         <div className="bg-slate-800 rounded-xl p-4">
-          <p className="text-slate-400 text-sm">Ahorro {savingPercentage}%</p>
+          <p className="text-slate-400 text-sm">
+            Ahorro {savingPercentage}%
+          </p>
           <h3 className="text-xl font-bold">{formatCRC(savingAmount)}</h3>
         </div>
 
@@ -213,13 +237,23 @@ async function seedFixedExpenses() {
           <p className="text-slate-400 text-sm">Disponible</p>
           <h3 className="text-xl font-bold">{formatCRC(availableAmount)}</h3>
         </div>
+
+        <div className="bg-slate-800 rounded-xl p-4">
+          <p className="text-slate-400 text-sm">Días disponibles</p>
+          <h3 className="text-xl font-bold">{daysUntilNextPayment}</h3>
+        </div>
       </div>
 
       <p className="mt-4 text-slate-300">
-        Límite diario recomendado: <strong>{formatCRC(dailyLimit)}</strong>
+        Límite diario recomendado:{' '}
+        <strong>{formatCRC(dailyLimit)}</strong>
       </p>
 
-      {message && <p className="mt-4 text-sm text-emerald-400">{message}</p>}
+      {message && (
+        <p className="mt-4 text-sm text-emerald-400">
+          {message}
+        </p>
+      )}
     </div>
   )
 }
