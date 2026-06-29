@@ -96,11 +96,11 @@ useEffect(() => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white px-6 py-8">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold">Desaborad Dinero</h1>
+      <div className="min-h-screen bg-slate-950 text-white px-4 sm:px-6 py-6 sm:py-8">
+        <div className="max-w-6xl mx-auto">
+          <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8"> 
+           <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">Desaborad Dinero</h1>
             <p className="text-slate-400">
               Bienvenido, {session?.user?.email}
             </p>
@@ -114,7 +114,7 @@ useEffect(() => {
           </button>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <p className="text-slate-400 text-sm">Ingreso mensual</p>
             <h2 className="text-2xl font-bold mt-2">
@@ -176,6 +176,12 @@ useEffect(() => {
             </p>
           )}
         </section>
+        <FixedExpensesCard
+          session={session}
+          expenses={fixedExpenses}
+          exchangeRate={latestCycle?.exchange_rate || 0}
+          onChange={loadFixedExpenses}
+        />
 
         <RegisterPayment
           session={session}
@@ -188,13 +194,7 @@ useEffect(() => {
           cycle={latestCycle}
           onExpenseCreated={loadDailyExpenses}
         />
-        <FixedExpensesCard
-          session={session}
-          expenses={fixedExpenses}
-          exchangeRate={latestCycle?.exchange_rate || 0}
-          onChange={loadFixedExpenses}
-        />
-
+     
         <UpcomingPayments
           expenses={fixedExpenses}
         />

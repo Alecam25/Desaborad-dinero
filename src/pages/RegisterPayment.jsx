@@ -38,6 +38,7 @@ export default function RegisterPayment({
   const fixedTotal = calculateFixedExpensesTotal(fixedExpenses, exchangeRate || 0)
   const afterFixed = salaryCRC - fixedTotal
   const savingAmount = calculateSavings(afterFixed, savingPercentage)
+
   const availableAmount = calculateAvailableAmount(
     salaryCRC,
     fixedTotal,
@@ -104,10 +105,12 @@ export default function RegisterPayment({
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-8">
-      <h2 className="text-2xl font-bold mb-2">Registrar pago</h2>
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mt-6 sm:mt-8">
+      <h2 className="text-xl sm:text-2xl font-bold mb-2">
+        Registrar pago
+      </h2>
 
-      <p className="text-slate-400 mb-6">
+      <p className="text-slate-400 mb-6 text-sm sm:text-base">
         Ingresa tu salario, tipo de cambio, frecuencia de pago y porcentaje de ahorro.
       </p>
 
@@ -120,7 +123,7 @@ export default function RegisterPayment({
 
       <form
         onSubmit={createMonthlyCycle}
-        className="grid grid-cols-1 md:grid-cols-6 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4"
       >
         <div>
           <label className="block text-sm text-slate-300 mb-2">
@@ -209,44 +212,56 @@ export default function RegisterPayment({
         <button
           type="submit"
           disabled={loading}
-          className="md:col-span-6 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition disabled:opacity-60"
+          className="sm:col-span-2 lg:col-span-3 xl:col-span-6 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition disabled:opacity-60"
         >
           {loading ? 'Guardando...' : 'Crear presupuesto'}
         </button>
       </form>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-6">
-        <div className="bg-slate-800 rounded-xl p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mt-6">
+        <div className="bg-slate-800 rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
           <p className="text-slate-400 text-sm">Ingreso CRC</p>
-          <h3 className="text-xl font-bold">{formatCRC(salaryCRC)}</h3>
+          <h3 className="text-xl font-bold break-words">
+            {formatCRC(salaryCRC)}
+          </h3>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-4">
+        <div className="bg-slate-800 rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
           <p className="text-slate-400 text-sm">Gastos fijos</p>
-          <h3 className="text-xl font-bold">{formatCRC(fixedTotal)}</h3>
+          <h3 className="text-xl font-bold break-words">
+            {formatCRC(fixedTotal)}
+          </h3>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-4">
+        <div className="bg-slate-800 rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
           <p className="text-slate-400 text-sm">
             Ahorro {savingPercentage}%
           </p>
-          <h3 className="text-xl font-bold">{formatCRC(savingAmount)}</h3>
+          <h3 className="text-xl font-bold break-words">
+            {formatCRC(savingAmount)}
+          </h3>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-4">
+        <div className="bg-slate-800 rounded-xl p-4 min-h-[90px] flex flex-col justify-between">
           <p className="text-slate-400 text-sm">Disponible</p>
-          <h3 className="text-xl font-bold">{formatCRC(availableAmount)}</h3>
+          <h3 className="text-xl font-bold break-words">
+            {formatCRC(availableAmount)}
+          </h3>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-4">
+        <div className="bg-slate-800 rounded-xl p-4 min-h-[90px] flex flex-col justify-between sm:col-span-2 lg:col-span-1">
           <p className="text-slate-400 text-sm">Días disponibles</p>
-          <h3 className="text-xl font-bold">{daysUntilNextPayment}</h3>
+          <h3 className="text-xl font-bold">
+            {daysUntilNextPayment}
+          </h3>
         </div>
       </div>
 
-      <p className="mt-4 text-slate-300">
+      <p className="mt-4 text-slate-300 text-sm sm:text-base">
         Límite diario recomendado:{' '}
-        <strong>{formatCRC(dailyLimit)}</strong>
+        <strong className="text-white">
+          {formatCRC(dailyLimit)}
+        </strong>
       </p>
 
       {message && (

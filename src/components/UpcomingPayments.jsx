@@ -10,7 +10,7 @@ export default function UpcomingPayments({ expenses }) {
   )
 
   return (
-    <section className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+    <section className="mt-6 sm:mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
       <h2 className="text-2xl font-bold mb-6">
         Próximos pagos
       </h2>
@@ -25,7 +25,7 @@ export default function UpcomingPayments({ expenses }) {
         {upcoming.map((expense) => (
           <div
             key={expense.id}
-            className="bg-slate-800 rounded-xl p-4 flex justify-between"
+            className="bg-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:justify-between gap-2"
           >
             <div>
               <p>{expense.name}</p>
