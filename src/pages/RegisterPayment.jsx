@@ -14,7 +14,8 @@ export default function RegisterPayment({
   fixedExpenses = [],
   onCycleCreated,
 }) {
-  const [salaryUsd, setSalaryUsd] = useState(930)
+  const [salaryAmount, setSalaryAmount] = useState('')
+  const [salaryCurrency, setSalaryCurrency] = useState('USD')
   const [exchangeRate, setExchangeRate] = useState('')
   const [paymentDate, setPaymentDate] = useState('')
   const [nextPaymentDate, setNextPaymentDate] = useState('')
@@ -22,6 +23,16 @@ export default function RegisterPayment({
   const [savingPercentage, setSavingPercentage] = useState(10)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const hasUsdFixedExpenses = fixedExpenses.some(
+    (expense) => expense.currency === 'USD'
+  )
+
+  const exchangeRateRequired = salaryCurrency === 'USD' || hasUsdFixedExpenses
+
+  const exchangeRateForCalculations = exchangeRateRequired
+    ? Number(exchangeRate || 0)
+    : 1
 
   function calculateDaysBetween(startDate, endDate) {
     if (!startDate || !endDate) return 30
@@ -34,8 +45,16 @@ export default function RegisterPayment({
     return diff > 0 ? diff : 30
   }
 
-  const salaryCRC = calculateSalaryCRC(salaryUsd, exchangeRate || 0)
-  const fixedTotal = calculateFixedExpensesTotal(fixedExpenses, exchangeRate || 0)
+  const salaryCRC =
+    salaryCurrency === 'USD'
+      ? calculateSalaryCRC(salaryAmount, exchangeRateForCalculations)
+      : Number(salaryAmount || 0)
+
+  const fixedTotal = calculateFixedExpensesTotal(
+    fixedExpenses,
+    exchangeRateForCalculations
+  )
+
   const afterFixed = salaryCRC - fixedTotal
   const savingAmount = calculateSavings(afterFixed, savingPercentage)
 
@@ -60,6 +79,12 @@ export default function RegisterPayment({
     setLoading(true)
     setMessage('')
 
+    if (exchangeRateRequired && Number(exchangeRate) <= 0) {
+      setLoading(false)
+      setMessage('Debes ingresar un tipo de cambio válido.')
+      return
+    }
+
     const month = paymentDate.slice(0, 7)
 
     const { data: existingCycle } = await supabase
@@ -82,8 +107,12 @@ export default function RegisterPayment({
       next_payment_date: nextPaymentDate,
       pay_frequency: payFrequency,
       days_until_next_payment: daysUntilNextPayment,
-      salary_usd: Number(salaryUsd),
-      exchange_rate: Number(exchangeRate),
+      salary_currency: salaryCurrency,
+      salary_amount: Number(salaryAmount),
+      salary_usd: salaryCurrency === 'USD' ? Number(salaryAmount) : 0,
+      exchange_rate: exchangeRateRequired
+        ? Number(exchangeRate)
+        : 1,
       salary_crc: salaryCRC,
       fixed_expenses_total: fixedTotal,
       saving_percentage: Number(savingPercentage),
@@ -111,7 +140,7 @@ export default function RegisterPayment({
       </h2>
 
       <p className="text-slate-400 mb-6 text-sm sm:text-base">
-        Ingresa tu salario, tipo de cambio, frecuencia de pago y porcentaje de ahorro.
+        Ingresa tu salario, moneda, tipo de cambio, frecuencia de pago y porcentaje de ahorro.
       </p>
 
       {fixedExpenses.length === 0 && (
@@ -123,19 +152,34 @@ export default function RegisterPayment({
 
       <form
         onSubmit={createMonthlyCycle}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4"
       >
         <div>
           <label className="block text-sm text-slate-300 mb-2">
-            Salario USD
+            Salario
           </label>
           <input
             type="number"
-            value={salaryUsd}
-            onChange={(e) => setSalaryUsd(e.target.value)}
+            value={salaryAmount}
+            onChange={(e) => setSalaryAmount(e.target.value)}
+            placeholder={salaryCurrency === 'USD' ? 'Ej: 1000' : 'Ej: 500000'}
             className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
             required
           />
+        </div>
+
+        <div>
+          <label className="block text-sm text-slate-300 mb-2">
+            Moneda
+          </label>
+          <select
+            value={salaryCurrency}
+            onChange={(e) => setSalaryCurrency(e.target.value)}
+            className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
+          >
+            <option value="USD">Dólares</option>
+            <option value="CRC">Colones</option>
+          </select>
         </div>
 
         <div>
@@ -147,9 +191,15 @@ export default function RegisterPayment({
             step="0.01"
             value={exchangeRate}
             onChange={(e) => setExchangeRate(e.target.value)}
+            placeholder="Ej: 500"
             className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
-            required
+            required={exchangeRateRequired}
           />
+          {!exchangeRateRequired && (
+            <p className="text-xs text-slate-500 mt-1">
+              No requerido si todo está en colones.
+            </p>
+          )}
         </div>
 
         <div>
@@ -212,7 +262,7 @@ export default function RegisterPayment({
         <button
           type="submit"
           disabled={loading}
-          className="sm:col-span-2 lg:col-span-3 xl:col-span-6 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition disabled:opacity-60"
+          className="sm:col-span-2 lg:col-span-3 xl:col-span-7 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition disabled:opacity-60"
         >
           {loading ? 'Guardando...' : 'Crear presupuesto'}
         </button>
