@@ -1,27 +1,28 @@
 import { useEffect, useState } from 'react'
 import FixedExpensesCard from '../components/FixedExpensesCard'
 import UpcomingPayments from '../components/UpcomingPayments'
+import MonthlyHistory from '../components/MonthlyHistory'
+import FinancialOverview from '../components/FinancialOverview'
 import { supabase } from '../lib/supabaseClient'
 import RegisterPayment from './RegisterPayment'
 import DailyExpenses from './DailyExpenses'
 import { formatCRC } from '../utils/financeCalculations'
-import MonthlyHistory from '../components/MonthlyHistory'
 
 export default function Dashboard({ session }) {
   const [latestCycle, setLatestCycle] = useState(null)
   const [dailyExpenses, setDailyExpenses] = useState([])
   const [fixedExpenses, setFixedExpenses] = useState([])
 
-useEffect(() => {
-  loadLatestCycle()
-  loadFixedExpenses()
-}, [])
+  useEffect(() => {
+    loadLatestCycle()
+    loadFixedExpenses()
+  }, [])
 
-useEffect(() => {
-  if (latestCycle) {
-    loadDailyExpenses()
-  }
-}, [latestCycle])
+  useEffect(() => {
+    if (latestCycle) {
+      loadDailyExpenses()
+    }
+  }, [latestCycle])
 
   async function loadLatestCycle() {
     const { data, error } = await supabase
@@ -30,7 +31,7 @@ useEffect(() => {
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (!error) {
       setLatestCycle(data)
@@ -38,6 +39,8 @@ useEffect(() => {
   }
 
   async function loadDailyExpenses() {
+    if (!latestCycle) return
+
     const { data, error } = await supabase
       .from('daily_expenses')
       .select('*')
@@ -48,18 +51,19 @@ useEffect(() => {
       setDailyExpenses(data || [])
     }
   }
-  
-  async function loadFixedExpenses() {
-  const { data, error } = await supabase
-    .from('fixed_expenses')
-    .select('*')
-    .eq('user_id', session.user.id)
-    .eq('is_active', true)
 
-  if (!error) {
-    setFixedExpenses(data || [])
+  async function loadFixedExpenses() {
+    const { data, error } = await supabase
+      .from('fixed_expenses')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('is_active', true)
+      .order('due_day', { ascending: true })
+
+    if (!error) {
+      setFixedExpenses(data || [])
+    }
   }
-}
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -72,36 +76,16 @@ useEffect(() => {
 
   const availableInitial = Number(latestCycle?.available_amount || 0)
   const availableNow = availableInitial - totalSpent
-  const percentageRemaining =
-    availableInitial > 0 ? (availableNow / availableInitial) * 100 : 100
-
-  let status = {
-    text: 'Vas bien',
-    emoji: '🟢',
-    box: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-  }
-
-  if (percentageRemaining <= 25) {
-    status = {
-      text: 'Cuidado, queda poco dinero',
-      emoji: '🔴',
-      box: 'bg-red-500/10 text-red-400 border-red-500/30',
-    }
-  } else if (percentageRemaining <= 50) {
-    status = {
-      text: 'Atención, controla gastos',
-      emoji: '🟡',
-      box: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-    }
-  }
 
   return (
-      <div className="min-h-screen bg-slate-950 text-white px-4 sm:px-6 py-6 sm:py-8">
-        <div className="max-w-6xl mx-auto">
-          <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8"> 
-           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Desaborad Dinero</h1>
-            <p className="text-slate-400">
+    <div className="min-h-screen bg-slate-950 text-white px-4 sm:px-6 py-6 sm:py-8">
+      <div className="max-w-6xl mx-auto">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">
+              Desaborad Dinero
+            </h1>
+            <p className="text-slate-400 text-sm sm:text-base">
               Bienvenido, {session?.user?.email}
             </p>
           </div>
@@ -144,44 +128,21 @@ useEffect(() => {
           </div>
         </section>
 
-        <section className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <h2 className="text-xl font-bold mb-2">Estado financiero</h2>
-
-          {latestCycle ? (
-            <>
-              <p className="text-slate-400">
-                Límite diario recomendado:{' '}
-                <strong className="text-white">
-                  {formatCRC(latestCycle.daily_limit)}
-                </strong>
-              </p>
-
-              <p className="text-slate-400 mt-2">
-                Te queda el{' '}
-                <strong className="text-white">
-                  {percentageRemaining.toFixed(1)}%
-                </strong>{' '}
-                de tu dinero disponible.
-              </p>
-
-              <div
-                className={`mt-6 inline-flex items-center gap-3 border px-4 py-3 rounded-xl ${status.box}`}
-              >
-                {status.emoji} {status.text}
-              </div>
-            </>
-          ) : (
+        {latestCycle ? (
+          <FinancialOverview
+            totalSpent={totalSpent}
+            availableInitial={availableInitial}
+            availableNow={availableNow}
+            dailyLimit={latestCycle.daily_limit}
+          />
+        ) : (
+          <section className="mt-6 sm:mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
+            <h2 className="text-xl font-bold mb-2">Estado financiero</h2>
             <p className="text-slate-400">
-              Todavía no has creado un presupuesto mensual.
+              Todavía no has creado un presupuesto. Registra tu primer pago para ver el resumen financiero.
             </p>
-          )}
-        </section>
-        <FixedExpensesCard
-          session={session}
-          expenses={fixedExpenses}
-          exchangeRate={latestCycle?.exchange_rate || 0}
-          onChange={loadFixedExpenses}
-        />
+          </section>
+        )}
 
         <RegisterPayment
           session={session}
@@ -194,10 +155,16 @@ useEffect(() => {
           cycle={latestCycle}
           onExpenseCreated={loadDailyExpenses}
         />
-     
-        <UpcomingPayments
+
+        <FixedExpensesCard
+          session={session}
           expenses={fixedExpenses}
+          exchangeRate={latestCycle?.exchange_rate || 0}
+          onChange={loadFixedExpenses}
         />
+
+        <UpcomingPayments expenses={fixedExpenses} />
+
         <MonthlyHistory session={session} />
       </div>
     </div>
