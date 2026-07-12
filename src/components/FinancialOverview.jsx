@@ -2,17 +2,23 @@ import { formatCRC } from '../utils/financeCalculations'
 
 export default function FinancialOverview({
   totalSpent,
+  extraIncomeTotal = 0,
   availableInitial,
   availableNow,
   dailyLimit,
 }) {
+  const availableWithExtraIncome =
+    Number(availableInitial) + Number(extraIncomeTotal)
+
   const percentageUsed =
-    availableInitial > 0 ? (totalSpent / availableInitial) * 100 : 0
+    availableWithExtraIncome > 0
+      ? (totalSpent / availableWithExtraIncome) * 100
+      : 0
 
   const safePercentage = Math.min(Math.max(percentageUsed, 0), 100)
 
   let status = {
-    emoji: '🟢',
+    label: '🟢',
     title: 'Vas bien',
     message: 'Estás usando tu dinero de forma controlada. Sigue así.',
     badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
@@ -21,7 +27,7 @@ export default function FinancialOverview({
 
   if (safePercentage >= 50 && safePercentage < 75) {
     status = {
-      emoji: '🟡',
+      label: '🟡',
       title: 'Cuidado con el ritmo',
       message: 'Ya usaste más de la mitad de tu dinero disponible. Revisa tus próximos gastos.',
       badge: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
@@ -31,7 +37,7 @@ export default function FinancialOverview({
 
   if (safePercentage >= 75) {
     status = {
-      emoji: '🔴',
+      label: '🔴',
       title: 'Alerta financiera',
       message: 'Estás cerca de consumir tu dinero disponible. Intenta reducir gastos no necesarios.',
       badge: 'bg-red-500/10 text-red-400 border-red-500/30',
@@ -41,7 +47,7 @@ export default function FinancialOverview({
 
   if (availableNow < 0) {
     status = {
-      emoji: '🚨',
+      label: '🚨',
       title: 'Presupuesto sobrepasado',
       message: 'Ya gastaste más de lo disponible. Es momento de frenar gastos y revisar prioridades.',
       badge: 'bg-red-500/10 text-red-400 border-red-500/30',
@@ -56,7 +62,7 @@ export default function FinancialOverview({
           <div
             className={`inline-flex items-center gap-2 border px-4 py-2 rounded-full text-sm font-semibold ${status.badge}`}
           >
-            <span>{status.emoji}</span>
+            <span>{status.label}</span>
             <span>{status.title}</span>
           </div>
 
@@ -99,7 +105,7 @@ export default function FinancialOverview({
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
           <div className="bg-slate-950/60 border border-slate-700 rounded-xl p-4">
             <p className="text-slate-400 text-sm">Disponible inicial</p>
             <h4 className="text-xl font-bold mt-1">
@@ -111,6 +117,13 @@ export default function FinancialOverview({
             <p className="text-slate-400 text-sm">Gastado</p>
             <h4 className="text-xl font-bold mt-1">
               {formatCRC(totalSpent)}
+            </h4>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-700 rounded-xl p-4">
+            <p className="text-slate-400 text-sm">Ingresos extra</p>
+            <h4 className="text-xl font-bold mt-1">
+              {formatCRC(extraIncomeTotal)}
             </h4>
           </div>
 

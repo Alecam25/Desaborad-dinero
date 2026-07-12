@@ -225,7 +225,7 @@ export default function RegisterPayment({
             onChange={(e) => setNextPaymentDate(e.target.value)}
             className="w-full min-w-0 rounded-xl bg-slate-800 border border-slate-700 px-3 sm:px-4 py-3 outline-none focus:border-emerald-500 text-sm sm:text-base"
             required
-          />``
+          />
         </div>
 
         <div>

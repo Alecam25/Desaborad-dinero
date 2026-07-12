@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { formatCRC } from '../utils/financeCalculations'
 
-export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
+export default function DailyExpenses({
+  session,
+  cycle,
+  extraIncomeTotal = 0,
+  onExpenseCreated,
+}) {
   const [expenses, setExpenses] = useState([])
   const [category, setCategory] = useState('Comida')
   const [description, setDescription] = useState('')
@@ -11,13 +16,9 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
   const [expenseDate, setExpenseDate] = useState('')
   const [message, setMessage] = useState('')
 
-  useEffect(() => {
-    if (cycle) {
-      loadExpenses()
-    }
-  }, [cycle])
+  const loadExpenses = useCallback(async () => {
+    if (!cycle) return
 
-  async function loadExpenses() {
     const { data, error } = await supabase
       .from('daily_expenses')
       .select('*')
@@ -31,7 +32,13 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
     }
 
     setExpenses(data || [])
-  }
+  }, [cycle, session.user.id])
+
+  useEffect(() => {
+    if (cycle) {
+      loadExpenses()
+    }
+  }, [cycle, loadExpenses])
 
   async function saveExpense(e) {
     e.preventDefault()
@@ -84,7 +91,9 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
     0
   )
 
-  const remaining = Number(cycle?.available_amount || 0) - totalSpent
+  const availableWithExtraIncome =
+    Number(cycle?.available_amount || 0) + Number(extraIncomeTotal)
+  const remaining = availableWithExtraIncome - totalSpent
 
   return (
     <section className="mt-6 sm:mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
@@ -108,7 +117,8 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
             type="date"
             value={expenseDate}
             onChange={(e) => setExpenseDate(e.target.value)}
-            className="w-full min-w-0 rounded-xl bg-slate-800 border border-slate-700 px-3 sm:px-4 py-3 outline-none focus:border-emerald-500 text-sm sm:text-base"            required
+            className="w-full min-w-0 rounded-xl bg-slate-800 border border-slate-700 px-3 sm:px-4 py-3 outline-none focus:border-emerald-500 text-sm sm:text-base"
+            required
           />
         </div>
 
@@ -179,7 +189,7 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
         </button>
       </form>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
         <div className="bg-slate-800 rounded-xl p-4">
           <p className="text-slate-400 text-sm">Gastado</p>
           <h3 className="text-xl font-bold">{formatCRC(totalSpent)}</h3>
@@ -190,6 +200,11 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
           <h3 className="text-xl font-bold">
             {formatCRC(cycle.available_amount)}
           </h3>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-4">
+          <p className="text-slate-400 text-sm">Ingresos extra</p>
+          <h3 className="text-xl font-bold">{formatCRC(extraIncomeTotal)}</h3>
         </div>
 
         <div className="bg-slate-800 rounded-xl p-4 sm:col-span-2 lg:col-span-1">
@@ -205,7 +220,6 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
       )}
 
       <div className="mt-6">
-        {/* Vista móvil */}
         <div className="space-y-3 md:hidden">
           {expenses.length === 0 && (
             <p className="text-slate-400 text-sm">
@@ -252,7 +266,6 @@ export default function DailyExpenses({ session, cycle, onExpenseCreated }) {
           ))}
         </div>
 
-        {/* Vista escritorio */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-slate-400">

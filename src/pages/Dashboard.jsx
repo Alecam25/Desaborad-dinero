@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import FixedExpensesCard from '../components/FixedExpensesCard'
 import UpcomingPayments from '../components/UpcomingPayments'
 import MonthlyHistory from '../components/MonthlyHistory'
 import FinancialOverview from '../components/FinancialOverview'
+import ExtraIncome from '../components/ExtraIncome'
 import { supabase } from '../lib/supabaseClient'
 import RegisterPayment from './RegisterPayment'
 import DailyExpenses from './DailyExpenses'
@@ -12,19 +13,9 @@ export default function Dashboard({ session }) {
   const [latestCycle, setLatestCycle] = useState(null)
   const [dailyExpenses, setDailyExpenses] = useState([])
   const [fixedExpenses, setFixedExpenses] = useState([])
+  const [extraIncomes, setExtraIncomes] = useState([])
 
-  useEffect(() => {
-    loadLatestCycle()
-    loadFixedExpenses()
-  }, [])
-
-  useEffect(() => {
-    if (latestCycle) {
-      loadDailyExpenses()
-    }
-  }, [latestCycle])
-
-  async function loadLatestCycle() {
+  const loadLatestCycle = useCallback(async () => {
     const { data, error } = await supabase
       .from('monthly_cycles')
       .select('*')
@@ -36,9 +27,9 @@ export default function Dashboard({ session }) {
     if (!error) {
       setLatestCycle(data)
     }
-  }
+  }, [session.user.id])
 
-  async function loadDailyExpenses() {
+  const loadDailyExpenses = useCallback(async () => {
     if (!latestCycle) return
 
     const { data, error } = await supabase
@@ -50,9 +41,24 @@ export default function Dashboard({ session }) {
     if (!error) {
       setDailyExpenses(data || [])
     }
-  }
+  }, [latestCycle, session.user.id])
 
-  async function loadFixedExpenses() {
+  const loadExtraIncomes = useCallback(async () => {
+    if (!latestCycle) return
+
+    const { data, error } = await supabase
+      .from('extra_incomes')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('cycle_id', latestCycle.id)
+      .order('income_date', { ascending: false })
+
+    if (!error) {
+      setExtraIncomes(data || [])
+    }
+  }, [latestCycle, session.user.id])
+
+  const loadFixedExpenses = useCallback(async () => {
     const { data, error } = await supabase
       .from('fixed_expenses')
       .select('*')
@@ -63,7 +69,22 @@ export default function Dashboard({ session }) {
     if (!error) {
       setFixedExpenses(data || [])
     }
-  }
+  }, [session.user.id])
+
+  useEffect(() => {
+    loadLatestCycle()
+    loadFixedExpenses()
+  }, [loadFixedExpenses, loadLatestCycle])
+
+  useEffect(() => {
+    if (latestCycle) {
+      loadDailyExpenses()
+      loadExtraIncomes()
+    } else {
+      setDailyExpenses([])
+      setExtraIncomes([])
+    }
+  }, [latestCycle, loadDailyExpenses, loadExtraIncomes])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -74,8 +95,13 @@ export default function Dashboard({ session }) {
     0
   )
 
+  const totalExtraIncome = extraIncomes.reduce(
+    (total, income) => total + Number(income.amount_crc ?? income.amount),
+    0
+  )
+
   const availableInitial = Number(latestCycle?.available_amount || 0)
-  const availableNow = availableInitial - totalSpent
+  const availableNow = availableInitial + totalExtraIncome - totalSpent
 
   return (
     <div className="min-h-screen bg-slate-950 text-white px-4 sm:px-6 py-6 sm:py-8">
@@ -98,7 +124,7 @@ export default function Dashboard({ session }) {
           </button>
         </header>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <p className="text-slate-400 text-sm">Ingreso mensual</p>
             <h2 className="text-2xl font-bold mt-2">
@@ -121,6 +147,13 @@ export default function Dashboard({ session }) {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+            <p className="text-slate-400 text-sm">Ingresos extra</p>
+            <h2 className="text-2xl font-bold mt-2">
+              {formatCRC(totalExtraIncome)}
+            </h2>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <p className="text-slate-400 text-sm">Disponible actual</p>
             <h2 className="text-2xl font-bold mt-2">
               {formatCRC(availableNow)}
@@ -131,6 +164,7 @@ export default function Dashboard({ session }) {
         {latestCycle ? (
           <FinancialOverview
             totalSpent={totalSpent}
+            extraIncomeTotal={totalExtraIncome}
             availableInitial={availableInitial}
             availableNow={availableNow}
             dailyLimit={latestCycle.daily_limit}
@@ -150,9 +184,17 @@ export default function Dashboard({ session }) {
           onCycleCreated={loadLatestCycle}
         />
 
+        <ExtraIncome
+          session={session}
+          cycle={latestCycle}
+          incomes={extraIncomes}
+          onChange={loadExtraIncomes}
+        />
+
         <DailyExpenses
           session={session}
           cycle={latestCycle}
+          extraIncomeTotal={totalExtraIncome}
           onExpenseCreated={loadDailyExpenses}
         />
 
