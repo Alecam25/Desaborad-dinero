@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import FixedExpensesCard from '../components/FixedExpensesCard'
 import UpcomingPayments from '../components/UpcomingPayments'
 import MonthlyHistory from '../components/MonthlyHistory'
 import FinancialOverview from '../components/FinancialOverview'
 import ExtraIncome from '../components/ExtraIncome'
 import { supabase } from '../lib/supabaseClient'
-import RegisterPayment from './RegisterPayment'
 import DailyExpenses from './DailyExpenses'
 import { formatCRC } from '../utils/financeCalculations'
 
-export default function Dashboard({ session }) {
+export default function Dashboard({ session, onRegisterPayment }) {
   const [latestCycle, setLatestCycle] = useState(null)
   const [dailyExpenses, setDailyExpenses] = useState([])
   const [fixedExpenses, setFixedExpenses] = useState([])
@@ -116,12 +114,22 @@ export default function Dashboard({ session }) {
             </p>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl border border-slate-700"
-          >
-            Cerrar sesión
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={onRegisterPayment}
+              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-xl"
+            >
+              Registrar pago
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl border border-slate-700"
+            >
+              Cerrar sesión
+            </button>
+          </div>
         </header>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -178,19 +186,6 @@ export default function Dashboard({ session }) {
           </section>
         )}
 
-        <RegisterPayment
-          session={session}
-          fixedExpenses={fixedExpenses}
-          onCycleCreated={loadLatestCycle}
-        />
-
-        <ExtraIncome
-          session={session}
-          cycle={latestCycle}
-          incomes={extraIncomes}
-          onChange={loadExtraIncomes}
-        />
-
         <DailyExpenses
           session={session}
           cycle={latestCycle}
@@ -198,11 +193,11 @@ export default function Dashboard({ session }) {
           onExpenseCreated={loadDailyExpenses}
         />
 
-        <FixedExpensesCard
+        <ExtraIncome
           session={session}
-          expenses={fixedExpenses}
-          exchangeRate={latestCycle?.exchange_rate || 0}
-          onChange={loadFixedExpenses}
+          cycle={latestCycle}
+          incomes={extraIncomes}
+          onChange={loadExtraIncomes}
         />
 
         <UpcomingPayments expenses={fixedExpenses} />
