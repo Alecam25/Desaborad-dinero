@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
-export default function Login() {
+function getSignupRedirectUrl() {
+  const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
+
+  return `${appUrl.replace(/\/$/, '')}/#/bienvenida`
+}
+
+export default function Login({ onAccountCreated }) {
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -16,23 +22,18 @@ export default function Login() {
 
     try {
       if (isRegister) {
-        const redirectUrl =
-          import.meta.env.VITE_APP_URL || window.location.origin
-
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: redirectUrl,
+            emailRedirectTo: getSignupRedirectUrl(),
           },
         })
 
         if (error) throw error
 
-        setMessageType('success')
-        setMessage(
-          'Cuenta creada. Revisa tu correo para confirmar la cuenta antes de iniciar sesión.'
-        )
+        setPassword('')
+        onAccountCreated?.(email, Boolean(data.session))
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -117,7 +118,7 @@ export default function Login() {
 
             <p className="text-slate-400 mt-2">
               {isRegister
-                ? 'Crea tu cuenta para empezar a ordenar tu dinero.'
+                ? 'Crea tu cuenta y te guiamos con el primer paso.'
                 : 'Ingresa para ver tu dashboard financiero.'}
             </p>
           </div>
@@ -160,7 +161,7 @@ export default function Login() {
               {loading
                 ? 'Procesando...'
                 : isRegister
-                  ? 'Crear cuenta'
+                  ? 'Crear cuenta y continuar'
                   : 'Ingresar'}
             </button>
           </form>

@@ -1,11 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
+import CategoryBudgets from '../components/CategoryBudgets'
+import {
+  balanceCategoryBudgetsToAvailable,
+  createDefaultCategoryBudgets,
+  createDefaultDailyExpenseCategories,
+  isBalancingCategoryName,
+  loadDailyExpenseCategories,
+  normalizeCategoryBudgets,
+} from '../utils/categoryBudgets'
 import { supabase } from '../lib/supabaseClient'
-import { formatCRC } from '../utils/financeCalculations'
+import { formatCRC, formatCRCWithDecimals } from '../utils/financeCalculations'
+
+function getBudgetStorageKey(userId, cycleId) {
+  return `daily-expense-category-budgets-v6:${userId}:${cycleId}`
+}
 
 export default function DailyExpenses({
   session,
   cycle,
   extraIncomeTotal = 0,
+  onManageCategories,
   onExpenseCreated,
 }) {
   const [expenses, setExpenses] = useState([])
@@ -15,6 +29,14 @@ export default function DailyExpenses({
   const [paymentMethod, setPaymentMethod] = useState('SINPE')
   const [expenseDate, setExpenseDate] = useState('')
   const [message, setMessage] = useState('')
+  const [budgetAlert, setBudgetAlert] = useState('')
+  const [dailyCategories, setDailyCategories] = useState(() =>
+    createDefaultDailyExpenseCategories()
+  )
+  const [categoryBudgets, setCategoryBudgets] = useState(() =>
+    createDefaultCategoryBudgets()
+  )
+  const [budgetsLoaded, setBudgetsLoaded] = useState(false)
 
   const loadExpenses = useCallback(async () => {
     if (!cycle) return
@@ -34,11 +56,132 @@ export default function DailyExpenses({
     setExpenses(data || [])
   }, [cycle, session.user.id])
 
+  const totalSpent = expenses.reduce(
+    (total, expense) => total + Number(expense.amount),
+    0
+  )
+
+  const availableWithExtraIncome =
+    Number(cycle?.available_amount || 0) + Number(extraIncomeTotal)
+  const remaining = availableWithExtraIncome - totalSpent
+  const budgetBaseAmount = Math.max(Number(cycle?.available_amount || 0), 0)
+
   useEffect(() => {
     if (cycle) {
       loadExpenses()
     }
   }, [cycle, loadExpenses])
+
+  useEffect(() => {
+    const loadedCategories = loadDailyExpenseCategories(session.user.id)
+
+    setDailyCategories(loadedCategories)
+    setCategory((currentCategory) =>
+      loadedCategories.some((savedCategory) => savedCategory.name === currentCategory)
+        ? currentCategory
+        : loadedCategories[0]?.name || ''
+    )
+  }, [session.user.id])
+
+  useEffect(() => {
+    if (!cycle) {
+      setBudgetsLoaded(false)
+      setCategoryBudgets(createDefaultCategoryBudgets(null, dailyCategories))
+      setCategory(dailyCategories[0]?.name || '')
+      return
+    }
+
+    setBudgetsLoaded(false)
+    const storageKey = getBudgetStorageKey(session.user.id, cycle.id)
+
+    try {
+      const storedBudgets = window.localStorage.getItem(storageKey)
+
+      if (storedBudgets) {
+        const parsedBudgets = JSON.parse(storedBudgets)
+        const nextBudgets = normalizeCategoryBudgets(
+          parsedBudgets,
+          budgetBaseAmount,
+          dailyCategories
+        )
+
+        setCategoryBudgets(nextBudgets)
+        setCategory((currentCategory) =>
+          nextBudgets.some((budget) => budget.name === currentCategory)
+            ? currentCategory
+            : nextBudgets[0].name
+        )
+        setBudgetsLoaded(true)
+        return
+      }
+    } catch {
+      // If localStorage is unavailable, the screen still works with defaults.
+    }
+
+    const defaultBudgets = createDefaultCategoryBudgets(
+      budgetBaseAmount,
+      dailyCategories
+    )
+    setCategoryBudgets(defaultBudgets)
+    setCategory((currentCategory) =>
+      defaultBudgets.some((budget) => budget.name === currentCategory)
+        ? currentCategory
+        : defaultBudgets[0].name
+    )
+    setBudgetsLoaded(true)
+  }, [budgetBaseAmount, cycle, dailyCategories, session.user.id])
+
+  useEffect(() => {
+    if (!cycle || !budgetsLoaded || categoryBudgets.length === 0) return
+
+    try {
+      window.localStorage.setItem(
+        getBudgetStorageKey(session.user.id, cycle.id),
+        JSON.stringify(categoryBudgets)
+      )
+    } catch {
+      // Budget limits are optional UI state, so storage errors should not block expenses.
+    }
+  }, [budgetsLoaded, categoryBudgets, cycle, session.user.id])
+
+  function updateCategoryLimit(categoryName, value) {
+    const monthlyLimit = Math.max(Number(value || 0), 0)
+
+    if (isBalancingCategoryName(categoryName)) {
+      setBudgetAlert('Otros se ajusta automáticamente con el monto restante.')
+      return
+    }
+
+    setCategoryBudgets((currentBudgets) => {
+      const nextBudgets = currentBudgets.map((budget) =>
+        budget.name === categoryName
+          ? { ...budget, monthlyLimit }
+          : budget
+      )
+      const nonBalancingTotal = nextBudgets.reduce((total, budget) => {
+        if (isBalancingCategoryName(budget.name)) return total
+
+        return total + Number(budget.monthlyLimit || 0)
+      }, 0)
+
+      if (nonBalancingTotal > budgetBaseAmount) {
+        setBudgetAlert(
+          `No se puede asignar ${formatCRC(monthlyLimit)} a ${categoryName}. La suma de categorías se pasa del disponible inicial.`
+        )
+        return currentBudgets
+      }
+
+      setBudgetAlert('')
+      return balanceCategoryBudgetsToAvailable(nextBudgets, budgetBaseAmount)
+    })
+  }
+
+  function redistributeCategoryBudgets() {
+    setBudgetAlert('')
+    setCategoryBudgets(
+      createDefaultCategoryBudgets(budgetBaseAmount, dailyCategories)
+    )
+  }
 
   async function saveExpense(e) {
     e.preventDefault()
@@ -86,15 +229,6 @@ export default function DailyExpenses({
     return null
   }
 
-  const totalSpent = expenses.reduce(
-    (total, expense) => total + Number(expense.amount),
-    0
-  )
-
-  const availableWithExtraIncome =
-    Number(cycle?.available_amount || 0) + Number(extraIncomeTotal)
-  const remaining = availableWithExtraIncome - totalSpent
-
   return (
     <section className="mt-6 sm:mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
       <h2 className="text-xl sm:text-2xl font-bold mb-2">
@@ -104,6 +238,16 @@ export default function DailyExpenses({
       <p className="text-slate-400 mb-6 text-sm sm:text-base">
         Registra tus gastos para saber cuánto dinero te queda disponible.
       </p>
+
+      <CategoryBudgets
+        availableAmount={budgetBaseAmount}
+        budgetAlert={budgetAlert}
+        budgets={categoryBudgets}
+        expenses={expenses}
+        onManageCategories={onManageCategories}
+        onBudgetLimitChange={updateCategoryLimit}
+        onRedistribute={redistributeCategoryBudgets}
+      />
 
       <form
         onSubmit={saveExpense}
@@ -131,12 +275,11 @@ export default function DailyExpenses({
             onChange={(e) => setCategory(e.target.value)}
             className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 outline-none focus:border-emerald-500"
           >
-            <option>Comida</option>
-            <option>Transporte</option>
-            <option>Gustos</option>
-            <option>Salud</option>
-            <option>Educación</option>
-            <option>Otros</option>
+            {categoryBudgets.map((budget) => (
+              <option key={budget.name} value={budget.name}>
+                {budget.name}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -209,7 +352,7 @@ export default function DailyExpenses({
 
         <div className="bg-slate-800 rounded-xl p-4 sm:col-span-2 lg:col-span-1">
           <p className="text-slate-400 text-sm">Disponible actual</p>
-          <h3 className="text-xl font-bold">{formatCRC(remaining)}</h3>
+          <h3 className="text-xl font-bold">{formatCRCWithDecimals(remaining)}</h3>
         </div>
       </div>
 

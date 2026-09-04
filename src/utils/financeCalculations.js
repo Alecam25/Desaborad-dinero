@@ -32,3 +32,12 @@ export function formatCRC(amount) {
     maximumFractionDigits: 0,
   }).format(amount || 0)
 }
+
+export function formatCRCWithDecimals(amount) {
+  return new Intl.NumberFormat('es-CR', {
+    style: 'currency',
+    currency: 'CRC',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount || 0)
+}

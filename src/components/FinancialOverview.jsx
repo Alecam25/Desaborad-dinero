@@ -1,4 +1,4 @@
-import { formatCRC } from '../utils/financeCalculations'
+import { formatCRC, formatCRCWithDecimals } from '../utils/financeCalculations'
 
 export default function FinancialOverview({
   totalSpent,
@@ -78,7 +78,7 @@ export default function FinancialOverview({
         <div className="bg-slate-950/60 border border-slate-700 rounded-2xl p-5 min-w-full lg:min-w-[280px]">
           <p className="text-slate-400 text-sm">Disponible actual</p>
           <h3 className="text-3xl font-bold mt-1">
-            {formatCRC(availableNow)}
+            {formatCRCWithDecimals(availableNow)}
           </h3>
 
           <p className="text-slate-400 text-sm mt-4">
@@ -130,7 +130,7 @@ export default function FinancialOverview({
           <div className="bg-slate-950/60 border border-slate-700 rounded-xl p-4">
             <p className="text-slate-400 text-sm">Disponible actual</p>
             <h4 className="text-xl font-bold mt-1">
-              {formatCRC(availableNow)}
+              {formatCRCWithDecimals(availableNow)}
             </h4>
           </div>
         </div>

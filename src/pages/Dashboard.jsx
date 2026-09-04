@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import UpcomingPayments from '../components/UpcomingPayments'
 import MonthlyHistory from '../components/MonthlyHistory'
 import FinancialOverview from '../components/FinancialOverview'
-import ExtraIncome from '../components/ExtraIncome'
 import { supabase } from '../lib/supabaseClient'
-import DailyExpenses from './DailyExpenses'
-import { formatCRC } from '../utils/financeCalculations'
+import { formatCRC, formatCRCWithDecimals } from '../utils/financeCalculations'
 
-export default function Dashboard({ session, onRegisterPayment }) {
+export default function Dashboard({
+  session,
+  onRegisterPayment,
+  onMovements,
+}) {
   const [latestCycle, setLatestCycle] = useState(null)
   const [dailyExpenses, setDailyExpenses] = useState([])
   const [fixedExpenses, setFixedExpenses] = useState([])
@@ -124,6 +126,14 @@ export default function Dashboard({ session, onRegisterPayment }) {
             </button>
 
             <button
+              type="button"
+              onClick={onMovements}
+              className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl border border-slate-700"
+            >
+              Gastos diarios
+            </button>
+
+            <button
               onClick={handleLogout}
               className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl border border-slate-700"
             >
@@ -131,6 +141,18 @@ export default function Dashboard({ session, onRegisterPayment }) {
             </button>
           </div>
         </header>
+
+        <section className="mb-6 sm:mb-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
+          <h2 className="text-xl font-bold mb-2">
+            Cómo funciona tu dashboard
+          </h2>
+          <p className="text-slate-300 text-sm sm:text-base leading-6">
+            Primero registra tu pago para calcular el dinero disponible del mes.
+            Luego usa la pantalla de gastos diarios para anotar tus compras,
+            revisar tus límites por categoría y agregar ingresos extra cuando
+            recibas dinero adicional. Este resumen se actualiza con esos datos.
+          </p>
+        </section>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
@@ -164,7 +186,7 @@ export default function Dashboard({ session, onRegisterPayment }) {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
             <p className="text-slate-400 text-sm">Disponible actual</p>
             <h2 className="text-2xl font-bold mt-2">
-              {formatCRC(availableNow)}
+              {formatCRCWithDecimals(availableNow)}
             </h2>
           </div>
         </section>
@@ -185,20 +207,6 @@ export default function Dashboard({ session, onRegisterPayment }) {
             </p>
           </section>
         )}
-
-        <DailyExpenses
-          session={session}
-          cycle={latestCycle}
-          extraIncomeTotal={totalExtraIncome}
-          onExpenseCreated={loadDailyExpenses}
-        />
-
-        <ExtraIncome
-          session={session}
-          cycle={latestCycle}
-          incomes={extraIncomes}
-          onChange={loadExtraIncomes}
-        />
 
         <UpcomingPayments expenses={fixedExpenses} />
 
