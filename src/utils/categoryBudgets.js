@@ -1,9 +1,16 @@
 export const CATEGORY_ICON_OPTIONS = [
-  { value: 'utensils', label: 'Comida' },
-  { value: 'fuel', label: 'Gasolina' },
-  { value: 'dumbbell', label: 'Deportes' },
-  { value: 'scissors', label: 'Barbero' },
-  { value: 'package', label: 'Otros' },
+  { value: 'utensils', label: 'Comida', symbol: '🍽️' },
+  { value: 'fuel', label: 'Gasolina', symbol: '⛽' },
+  { value: 'dumbbell', label: 'Deportes', symbol: '🏋️' },
+  { value: 'scissors', label: 'Barbero', symbol: '✂️' },
+  { value: 'beach', label: 'Playa', symbol: '🏖️' },
+  { value: 'cake', label: 'Cumpleaños', symbol: '🎂' },
+  { value: 'health', label: 'Salud', symbol: '💊' },
+  { value: 'education', label: 'Educación', symbol: '📚' },
+  { value: 'shopping', label: 'Compras', symbol: '🛍️' },
+  { value: 'home', label: 'Casa', symbol: '🏠' },
+  { value: 'transport', label: 'Transporte', symbol: '🚗' },
+  { value: 'package', label: 'Otros', symbol: '📦' },
 ]
 
 export const BALANCING_CATEGORY_NAME = 'Otros'
@@ -71,6 +78,10 @@ function getSupportedIcon(icon) {
   )
 
   return isSupported ? icon : 'package'
+}
+
+export function getCategoryIconSymbol(icon) {
+  return CATEGORY_ICON_OPTIONS.find((option) => option.value === icon)?.symbol || '📦'
 }
 
 export function normalizeDailyExpenseCategories(categories) {

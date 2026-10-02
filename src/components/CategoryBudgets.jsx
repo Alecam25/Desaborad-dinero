@@ -1,22 +1,12 @@
 import {
-  Dumbbell,
-  Fuel,
-  Package,
   RotateCcw,
-  Scissors,
   Settings,
-  Utensils,
 } from 'lucide-react'
 import { formatCRC, formatCRCWithDecimals } from '../utils/financeCalculations'
-import { isBalancingCategoryName } from '../utils/categoryBudgets'
-
-const categoryIcons = {
-  dumbbell: Dumbbell,
-  fuel: Fuel,
-  package: Package,
-  scissors: Scissors,
-  utensils: Utensils,
-}
+import {
+  getCategoryIconSymbol,
+  isBalancingCategoryName,
+} from '../utils/categoryBudgets'
 
 function getSpentForBudget(expenses, budget) {
   return expenses
@@ -140,7 +130,6 @@ export default function CategoryBudgets({
           const safePercentage = Math.min(Math.max(percentage, 0), 100)
           const remaining = limit - spent
           const status = getBudgetStatus(spent, limit)
-          const CategoryIcon = categoryIcons[budget.icon] || Package
           const isAutomaticBudget = isBalancingCategoryName(budget.name)
 
           return (
@@ -150,8 +139,11 @@ export default function CategoryBudgets({
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3 min-w-0">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-2xl">
-                    <CategoryIcon className="h-5 w-5 text-slate-100" aria-hidden="true" />
+                  <span
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-2xl"
+                    aria-hidden="true"
+                  >
+                    {getCategoryIconSymbol(budget.icon)}
                   </span>
 
                   <div className="min-w-0">

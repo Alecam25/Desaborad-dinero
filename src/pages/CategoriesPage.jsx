@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import {
   CATEGORY_ICON_OPTIONS,
   createDefaultDailyExpenseCategories,
+  getCategoryIconSymbol,
   isBalancingCategoryName,
   loadDailyExpenseCategories,
   saveDailyExpenseCategories,
@@ -68,6 +69,12 @@ export default function CategoriesPage({ session, onBack }) {
     }, 0)
   }
 
+  function getAvailableToAssign(nextCategories = categories) {
+    if (availableInitial <= 0) return null
+
+    return Math.max(availableInitial - getControlledCategoriesTotal(nextCategories), 0)
+  }
+
   function exceedsAvailableInitial(nextCategories) {
     if (availableInitial <= 0) return false
 
@@ -113,8 +120,10 @@ export default function CategoriesPage({ session, onBack }) {
     ]
 
     if (exceedsAvailableInitial(nextCategories)) {
+      const availableToAssign = getAvailableToAssign()
+
       showError(
-        `No se puede agregar ${name} con ${formatCRC(monthlyLimit)} porque la suma se pasa del disponible inicial.`
+        `No se puede agregar ${name} con ${formatCRC(monthlyLimit)}. Queda ${formatCRC(availableToAssign)} sin asignar; reduce otro límite o usa un monto menor.`
       )
       return
     }
@@ -138,21 +147,32 @@ export default function CategoriesPage({ session, onBack }) {
       return
     }
 
+    const currentCategory = categories.find(
+      (category) => category.name === categoryName
+    )
+    const currentMonthlyLimit = Number(currentCategory?.defaultMonthlyLimit || 0)
+    const nextMonthlyLimit = Math.max(Number(value || 0), 0)
     const nextCategories = categories.map((category) =>
       category.name === categoryName
         ? {
             ...category,
             [field]:
               field === 'defaultMonthlyLimit'
-                ? Math.max(Number(value || 0), 0)
+                ? nextMonthlyLimit
                 : value,
           }
         : category
     )
 
-    if (field === 'defaultMonthlyLimit' && exceedsAvailableInitial(nextCategories)) {
+    if (
+      field === 'defaultMonthlyLimit' &&
+      nextMonthlyLimit > currentMonthlyLimit &&
+      exceedsAvailableInitial(nextCategories)
+    ) {
+      const availableToAssign = getAvailableToAssign()
+
       showError(
-        `No se puede asignar ${formatCRC(value)} a ${categoryName} porque la suma se pasa del disponible inicial.`
+        `No se puede asignar ${formatCRC(value)} a ${categoryName}. Queda ${formatCRC(availableToAssign)} sin asignar; reduce otro límite o usa un monto menor.`
       )
       return
     }
@@ -183,6 +203,9 @@ export default function CategoriesPage({ session, onBack }) {
       'Categorías restauradas.'
     )
   }
+
+  const controlledCategoriesTotal = getControlledCategoriesTotal(categories)
+  const availableToAssign = getAvailableToAssign()
 
   return (
     <div className="min-h-screen bg-slate-950 text-white px-4 sm:px-6 py-6 sm:py-8">
@@ -216,6 +239,11 @@ export default function CategoriesPage({ session, onBack }) {
               <p className="text-slate-400 text-sm sm:text-base mt-1">
                 Disponible inicial del último pago: {formatCRCWithDecimals(availableInitial)}.
               </p>
+              {availableToAssign !== null && (
+                <p className="text-slate-400 text-sm sm:text-base mt-1">
+                  Ya asignado: {formatCRC(controlledCategoriesTotal)}. Libre para nuevas categorías: {formatCRC(availableToAssign)}.
+                </p>
+              )}
             </div>
 
             <button
@@ -276,7 +304,7 @@ export default function CategoriesPage({ session, onBack }) {
               >
                 {CATEGORY_ICON_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {option.symbol} {option.label}
                   </option>
                 ))}
               </select>
@@ -332,12 +360,23 @@ export default function CategoriesPage({ session, onBack }) {
                 >
                   <div className="grid grid-cols-1 lg:grid-cols-[1fr_180px_1fr_auto] gap-4 lg:items-end">
                     <div>
-                      <p className="font-bold">{category.name}</p>
-                      <p className="text-sm text-slate-400 mt-1">
-                        {isAutomaticCategory
-                          ? 'Automático'
-                          : formatCRC(category.defaultMonthlyLimit)}
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-2xl"
+                          aria-hidden="true"
+                        >
+                          {getCategoryIconSymbol(category.icon)}
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="font-bold truncate">{category.name}</p>
+                          <p className="text-sm text-slate-400 mt-1">
+                            {isAutomaticCategory
+                              ? 'Automático'
+                              : formatCRC(category.defaultMonthlyLimit)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                     <div>
