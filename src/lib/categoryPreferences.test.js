@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { SourceTextModule, SyntheticModule, createContext } from 'node:vm'
 
-async function setup({ metadata = {}, local, failSave = false } = {}) {
+async function setup({ metadata = {}, local, localBudgets, failSave = false } = {}) {
   const storage = new Map(local ? [['daily-expense-categories:user-1', JSON.stringify(local)]] : [])
+  if (localBudgets) storage.set('daily-expense-category-budgets-v6:user-1:cycle-1', JSON.stringify(localBudgets))
   const writes = []
   const context = createContext({
     window: { localStorage: {
@@ -28,7 +29,7 @@ async function setup({ metadata = {}, local, failSave = false } = {}) {
   const service = new SourceTextModule(await readFile(new URL('./categoryPreferences.js', import.meta.url), 'utf8'), { context })
   await service.link((specifier) => specifier === './supabaseClient' ? client : budgets)
   await service.evaluate()
-  return { service: service.namespace, writes, storage }
+  return { service: service.namespace, writes, storage, metadata }
 }
 
 const custom = [{ name: 'Playa', icon: 'beach', defaultMonthlyLimit: 1000 }]
@@ -73,4 +74,45 @@ test('failed writes reject without replacing local categories', async () => {
   const { service, storage } = await setup({ local: custom, failSave: true })
   await assert.rejects(service.saveAccountCategories('user-1', [{ name: 'Nueva' }]), /Offline/)
   assert.equal(JSON.parse(storage.get('daily-expense-categories:user-1'))[0].name, 'Playa')
+})
+
+test('migrates local budget limits and a second device reads the same amounts', async () => {
+  const desktop = await setup({ localBudgets: [{ name: 'Playa', monthlyLimit: 500 }] })
+  const migrated = await desktop.service.loadAccountBudgets('user-1', 'cycle-1', 2000, custom)
+  assert.equal(migrated[0].monthlyLimit, 500)
+  const phone = await setup({ metadata: desktop.metadata, localBudgets: [{ name: 'Playa', monthlyLimit: 900 }] })
+  const loaded = await phone.service.loadAccountBudgets('user-1', 'cycle-1', 2000, custom)
+  assert.equal(loaded[0].monthlyLimit, 500)
+  assert.equal(loaded.find((budget) => budget.name === 'Otros').monthlyLimit, 1500)
+  assert.equal(phone.writes.length, 0)
+})
+
+test('loading default budgets does not upload them from a new device', async () => {
+  const { service, writes } = await setup({ localBudgets: [{ name: 'Playa', monthlyLimit: 1000 }] })
+  await service.loadAccountBudgets('user-1', 'cycle-1', 2000, custom)
+  assert.equal(writes.length, 0)
+})
+
+test('saves edits in order and keeps amounts separated by payment cycle', async () => {
+  const { service, metadata } = await setup({ metadata: { unrelated: 'kept' } })
+  await Promise.all([
+    service.saveAccountBudgets('user-1', 'cycle-1', [{ name: 'Playa', monthlyLimit: 500 }]),
+    service.saveAccountBudgets('user-1', 'cycle-2', [{ name: 'Playa', monthlyLimit: 800 }]),
+    service.saveAccountBudgets('user-1', 'cycle-1', [{ name: 'Playa', monthlyLimit: 700 }]),
+  ])
+  assert.equal(metadata.daily_expense_cycle_budgets['cycle-1'][0].monthlyLimit, 700)
+  assert.equal(metadata.daily_expense_cycle_budgets['cycle-2'][0].monthlyLimit, 800)
+  assert.equal(metadata.unrelated, 'kept')
+})
+
+test('failed budget writes preserve existing local limits and report failure', async () => {
+  const { service, storage } = await setup({ failSave: true, localBudgets: [{ name: 'Playa', monthlyLimit: 500 }] })
+  await assert.rejects(service.saveAccountBudgets('user-1', 'cycle-1', [{ name: 'Playa', monthlyLimit: 900 }]), /Offline/)
+  assert.equal(JSON.parse(storage.get(service.getBudgetStorageKey('user-1', 'cycle-1')))[0].monthlyLimit, 500)
+})
+
+test('rejects saving budgets for a different account', async () => {
+  const { service, writes } = await setup()
+  await assert.rejects(service.saveAccountBudgets('other-user', 'cycle-1', []), /cuenta activa/)
+  assert.equal(writes.length, 0)
 })

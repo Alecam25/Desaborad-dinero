@@ -4,15 +4,11 @@ import {
   balanceCategoryBudgetsToAvailable,
   createDefaultCategoryBudgets,
   isBalancingCategoryName,
-  normalizeCategoryBudgets,
 } from '../utils/categoryBudgets'
 import useAccountCategories from '../hooks/useAccountCategories'
+import useAccountBudgets from '../hooks/useAccountBudgets'
 import { supabase } from '../lib/supabaseClient'
 import { formatCRC, formatCRCWithDecimals } from '../utils/financeCalculations'
-
-function getBudgetStorageKey(userId, cycleId) {
-  return `daily-expense-category-budgets-v6:${userId}:${cycleId}`
-}
 
 export default function DailyExpenses({
   session,
@@ -30,10 +26,6 @@ export default function DailyExpenses({
   const [message, setMessage] = useState('')
   const [budgetAlert, setBudgetAlert] = useState('')
   const { categories: dailyCategories, ready: categoriesReady, error: categorySyncError } = useAccountCategories(session.user.id)
-  const [categoryBudgets, setCategoryBudgets] = useState(() =>
-    createDefaultCategoryBudgets()
-  )
-  const [budgetsLoaded, setBudgetsLoaded] = useState(false)
 
   const loadExpenses = useCallback(async () => {
     if (!cycle) return
@@ -62,6 +54,9 @@ export default function DailyExpenses({
     Number(cycle?.available_amount || 0) + Number(extraIncomeTotal)
   const remaining = availableWithExtraIncome - totalSpent
   const budgetBaseAmount = Math.max(Number(cycle?.available_amount || 0), 0)
+  const { budgets: categoryBudgets, ready: budgetsReady, error: budgetSyncError, saveBudgets } = useAccountBudgets(
+    session.user.id, cycle?.id, budgetBaseAmount, dailyCategories, categoriesReady
+  )
 
   useEffect(() => {
     if (cycle) {
@@ -77,67 +72,6 @@ export default function DailyExpenses({
     )
   }, [dailyCategories])
 
-  useEffect(() => {
-    if (!cycle || !categoriesReady) {
-      setBudgetsLoaded(false)
-      setCategoryBudgets(createDefaultCategoryBudgets(null, dailyCategories))
-      setCategory(dailyCategories[0]?.name || '')
-      return
-    }
-
-    setBudgetsLoaded(false)
-    const storageKey = getBudgetStorageKey(session.user.id, cycle.id)
-
-    try {
-      const storedBudgets = window.localStorage.getItem(storageKey)
-
-      if (storedBudgets) {
-        const parsedBudgets = JSON.parse(storedBudgets)
-        const nextBudgets = normalizeCategoryBudgets(
-          parsedBudgets,
-          budgetBaseAmount,
-          dailyCategories
-        )
-
-        setCategoryBudgets(nextBudgets)
-        setCategory((currentCategory) =>
-          nextBudgets.some((budget) => budget.name === currentCategory)
-            ? currentCategory
-            : nextBudgets[0].name
-        )
-        setBudgetsLoaded(true)
-        return
-      }
-    } catch {
-      // If localStorage is unavailable, the screen still works with defaults.
-    }
-
-    const defaultBudgets = createDefaultCategoryBudgets(
-      budgetBaseAmount,
-      dailyCategories
-    )
-    setCategoryBudgets(defaultBudgets)
-    setCategory((currentCategory) =>
-      defaultBudgets.some((budget) => budget.name === currentCategory)
-        ? currentCategory
-        : defaultBudgets[0].name
-    )
-    setBudgetsLoaded(true)
-  }, [budgetBaseAmount, categoriesReady, cycle, dailyCategories, session.user.id])
-
-  useEffect(() => {
-    if (!cycle || !categoriesReady || !budgetsLoaded || categoryBudgets.length === 0) return
-
-    try {
-      window.localStorage.setItem(
-        getBudgetStorageKey(session.user.id, cycle.id),
-        JSON.stringify(categoryBudgets)
-      )
-    } catch {
-      // Budget limits are optional UI state, so storage errors should not block expenses.
-    }
-  }, [budgetsLoaded, categoriesReady, categoryBudgets, cycle, session.user.id])
-
   function updateCategoryLimit(categoryName, value) {
     const monthlyLimit = Math.max(Number(value || 0), 0)
 
@@ -146,33 +80,31 @@ export default function DailyExpenses({
       return
     }
 
-    setCategoryBudgets((currentBudgets) => {
-      const nextBudgets = currentBudgets.map((budget) =>
-        budget.name === categoryName
-          ? { ...budget, monthlyLimit }
-          : budget
+    const nextBudgets = categoryBudgets.map((budget) =>
+      budget.name === categoryName
+        ? { ...budget, monthlyLimit }
+        : budget
+    )
+    const nonBalancingTotal = nextBudgets.reduce((total, budget) => {
+      if (isBalancingCategoryName(budget.name)) return total
+
+      return total + Number(budget.monthlyLimit || 0)
+    }, 0)
+
+    if (nonBalancingTotal > budgetBaseAmount) {
+      setBudgetAlert(
+        `No se puede asignar ${formatCRC(monthlyLimit)} a ${categoryName}. La suma de categorías se pasa del disponible inicial.`
       )
-      const nonBalancingTotal = nextBudgets.reduce((total, budget) => {
-        if (isBalancingCategoryName(budget.name)) return total
+      return
+    }
 
-        return total + Number(budget.monthlyLimit || 0)
-      }, 0)
-
-      if (nonBalancingTotal > budgetBaseAmount) {
-        setBudgetAlert(
-          `No se puede asignar ${formatCRC(monthlyLimit)} a ${categoryName}. La suma de categorías se pasa del disponible inicial.`
-        )
-        return currentBudgets
-      }
-
-      setBudgetAlert('')
-      return balanceCategoryBudgetsToAvailable(nextBudgets, budgetBaseAmount)
-    })
+    setBudgetAlert('')
+    saveBudgets(balanceCategoryBudgetsToAvailable(nextBudgets, budgetBaseAmount))
   }
 
   function redistributeCategoryBudgets() {
     setBudgetAlert('')
-    setCategoryBudgets(
+    saveBudgets(
       createDefaultCategoryBudgets(budgetBaseAmount, dailyCategories)
     )
   }
@@ -234,8 +166,10 @@ export default function DailyExpenses({
       </p>
 
       {categorySyncError && <p role="alert" className="mb-4 text-sm text-red-400">{categorySyncError}</p>}
+      {budgetSyncError && <p role="alert" className="mb-4 text-sm text-red-400">{budgetSyncError}</p>}
       {!categoriesReady && !categorySyncError && <p role="status" className="mb-4 text-sm text-slate-400">Cargando categorías...</p>}
-      <fieldset disabled={!categoriesReady} className="min-w-0">
+      {categoriesReady && !budgetsReady && !budgetSyncError && <p role="status" className="mb-4 text-sm text-slate-400">Cargando montos...</p>}
+      <fieldset disabled={!categoriesReady || !budgetsReady} className="min-w-0">
       <CategoryBudgets
         availableAmount={budgetBaseAmount}
         budgetAlert={budgetAlert}
