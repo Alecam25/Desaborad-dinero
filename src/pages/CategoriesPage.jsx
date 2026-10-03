@@ -5,16 +5,13 @@ import {
   createDefaultDailyExpenseCategories,
   getCategoryIconSymbol,
   isBalancingCategoryName,
-  loadDailyExpenseCategories,
-  saveDailyExpenseCategories,
 } from '../utils/categoryBudgets'
+import useAccountCategories from '../hooks/useAccountCategories'
 import { supabase } from '../lib/supabaseClient'
 import { formatCRC, formatCRCWithDecimals } from '../utils/financeCalculations'
 
 export default function CategoriesPage({ session, onBack }) {
-  const [categories, setCategories] = useState(() =>
-    loadDailyExpenseCategories(session.user.id)
-  )
+  const { categories, ready, error: syncError, saveCategories } = useAccountCategories(session.user.id)
   const [availableInitial, setAvailableInitial] = useState(0)
   const [form, setForm] = useState({
     name: '',
@@ -49,11 +46,12 @@ export default function CategoriesPage({ session, onBack }) {
     }
   }, [session.user.id])
 
-  function persistCategories(nextCategories, nextMessage) {
-    setCategories(nextCategories)
-    saveDailyExpenseCategories(session.user.id, nextCategories)
-    setMessageType('success')
-    setMessage(nextMessage)
+  async function persistCategories(nextCategories, nextMessage) {
+    setMessage('')
+    if (await saveCategories(nextCategories)) {
+      setMessageType('success')
+      setMessage(nextMessage)
+    }
   }
 
   function showError(errorMessage) {
@@ -230,6 +228,9 @@ export default function CategoriesPage({ session, onBack }) {
           </button>
         </header>
 
+        {syncError && <p role="alert" className="mb-4 text-sm text-red-400">{syncError}</p>}
+        {!ready && !syncError && <p role="status" className="mb-4 text-sm text-slate-400">Cargando categorías...</p>}
+        <fieldset disabled={!ready} className="min-w-0">
         <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
             <div>
@@ -433,6 +434,7 @@ export default function CategoriesPage({ session, onBack }) {
             })}
           </div>
         </section>
+        </fieldset>
       </div>
     </div>
   )

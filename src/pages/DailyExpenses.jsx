@@ -3,11 +3,10 @@ import CategoryBudgets from '../components/CategoryBudgets'
 import {
   balanceCategoryBudgetsToAvailable,
   createDefaultCategoryBudgets,
-  createDefaultDailyExpenseCategories,
   isBalancingCategoryName,
-  loadDailyExpenseCategories,
   normalizeCategoryBudgets,
 } from '../utils/categoryBudgets'
+import useAccountCategories from '../hooks/useAccountCategories'
 import { supabase } from '../lib/supabaseClient'
 import { formatCRC, formatCRCWithDecimals } from '../utils/financeCalculations'
 
@@ -30,9 +29,7 @@ export default function DailyExpenses({
   const [expenseDate, setExpenseDate] = useState('')
   const [message, setMessage] = useState('')
   const [budgetAlert, setBudgetAlert] = useState('')
-  const [dailyCategories, setDailyCategories] = useState(() =>
-    createDefaultDailyExpenseCategories()
-  )
+  const { categories: dailyCategories, ready: categoriesReady, error: categorySyncError } = useAccountCategories(session.user.id)
   const [categoryBudgets, setCategoryBudgets] = useState(() =>
     createDefaultCategoryBudgets()
   )
@@ -73,18 +70,15 @@ export default function DailyExpenses({
   }, [cycle, loadExpenses])
 
   useEffect(() => {
-    const loadedCategories = loadDailyExpenseCategories(session.user.id)
-
-    setDailyCategories(loadedCategories)
     setCategory((currentCategory) =>
-      loadedCategories.some((savedCategory) => savedCategory.name === currentCategory)
+      dailyCategories.some((savedCategory) => savedCategory.name === currentCategory)
         ? currentCategory
-        : loadedCategories[0]?.name || ''
+        : dailyCategories[0]?.name || ''
     )
-  }, [session.user.id])
+  }, [dailyCategories])
 
   useEffect(() => {
-    if (!cycle) {
+    if (!cycle || !categoriesReady) {
       setBudgetsLoaded(false)
       setCategoryBudgets(createDefaultCategoryBudgets(null, dailyCategories))
       setCategory(dailyCategories[0]?.name || '')
@@ -129,10 +123,10 @@ export default function DailyExpenses({
         : defaultBudgets[0].name
     )
     setBudgetsLoaded(true)
-  }, [budgetBaseAmount, cycle, dailyCategories, session.user.id])
+  }, [budgetBaseAmount, categoriesReady, cycle, dailyCategories, session.user.id])
 
   useEffect(() => {
-    if (!cycle || !budgetsLoaded || categoryBudgets.length === 0) return
+    if (!cycle || !categoriesReady || !budgetsLoaded || categoryBudgets.length === 0) return
 
     try {
       window.localStorage.setItem(
@@ -142,7 +136,7 @@ export default function DailyExpenses({
     } catch {
       // Budget limits are optional UI state, so storage errors should not block expenses.
     }
-  }, [budgetsLoaded, categoryBudgets, cycle, session.user.id])
+  }, [budgetsLoaded, categoriesReady, categoryBudgets, cycle, session.user.id])
 
   function updateCategoryLimit(categoryName, value) {
     const monthlyLimit = Math.max(Number(value || 0), 0)
@@ -239,6 +233,9 @@ export default function DailyExpenses({
         Registra tus gastos para saber cuánto dinero te queda disponible.
       </p>
 
+      {categorySyncError && <p role="alert" className="mb-4 text-sm text-red-400">{categorySyncError}</p>}
+      {!categoriesReady && !categorySyncError && <p role="status" className="mb-4 text-sm text-slate-400">Cargando categorías...</p>}
+      <fieldset disabled={!categoriesReady} className="min-w-0">
       <CategoryBudgets
         availableAmount={budgetBaseAmount}
         budgetAlert={budgetAlert}
@@ -331,6 +328,7 @@ export default function DailyExpenses({
           Guardar gasto
         </button>
       </form>
+      </fieldset>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
         <div className="bg-slate-800 rounded-xl p-4">
